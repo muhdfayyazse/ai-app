@@ -5,4 +5,5 @@ frontend/.DS_Store
 backend/target/
 backend/data
 backend/.DS_Store
+.DS_Store
 
