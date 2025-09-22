@@ -98,5 +98,7 @@ export const useChat = (initialConfig: ChatConfig = { model: 'llama3.2:3b' }) =>
     setError(null);
   }, []);
 
+
+  
   return { messages, isLoading, error, config, setConfig, sendMessage, clearMessages };
 };
