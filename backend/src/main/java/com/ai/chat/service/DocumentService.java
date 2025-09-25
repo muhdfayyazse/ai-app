@@ -40,6 +40,8 @@ public class DocumentService {
         }
     }
 
+
+    
     private String extractTextFromFile(MultipartFile file) throws Exception {
         String originalName = file.getOriginalFilename();
         String fileName = originalName == null ? "" : originalName.toLowerCase();

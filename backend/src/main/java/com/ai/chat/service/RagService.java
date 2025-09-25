@@ -1,39 +1,43 @@
 package com.ai.chat.service;
 
-import com.ai.chat.entity.Document;
-import com.ai.chat.repository.DocumentRepository;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Flux;
-import lombok.extern.slf4j.Slf4j;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.stereotype.Service;
+
+import com.ai.chat.dto.AiChatResponse;
+import com.ai.chat.entity.Document;
+import com.ai.chat.repository.DocumentRepository;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+
 @Service
+@RequiredArgsConstructor
 @Slf4j
 public class RagService {
-    private final WebClient webClient;
+    
+
+    private final AiService aiService;
+
     private final DocumentRepository documentRepository;
 
-    public RagService(DocumentRepository documentRepository) {
-        this.webClient = WebClient.builder()
-                .baseUrl("http://localhost:11434")
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .build();
-        this.documentRepository = documentRepository;
-    }
 
-    public Flux<String> streamRagCompletion(String question, String model, int maxResults) {
+    public Flux<String> streamRagCompletion(String question, int maxResults) {
         List<Document> relevantDocs = findRelevantDocuments(question, maxResults);
         String context = buildContext(relevantDocs);
         String enhancedPrompt = createEnhancedPrompt(question, context);
-
-        return streamCompletion(enhancedPrompt, model);
+        return streamCompletion(enhancedPrompt);
     }
 
     private List<Document> findRelevantDocuments(String query, int maxResults) {
@@ -129,7 +133,7 @@ public class RagService {
             """, context, question);
     }
 
-    private Flux<String> streamCompletion(String prompt, String model) {
+    private Flux<String> streamCompletion(String prompt) {
         String escapedPrompt = prompt
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"")
@@ -137,68 +141,12 @@ public class RagService {
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
                 
-        String requestBody = String.format("""
-            {
-                "model": "%s",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "%s"
-                    }
-                ],
-                "stream": true
-            }
-        """, model, escapedPrompt);
+        List<Message> messages = new ArrayList<>();
+        messages.add(new UserMessage(escapedPrompt));    
 
-        //log.info("Request: {} ", requestBody);
+        return aiService.streamChatCompletion(messages);
 
-        return webClient.post()
-                .uri("/api/chat")
-                .bodyValue(requestBody)
-                //.accept(MediaType.TEXT_EVENT_STREAM)
-                .retrieve()
-                .bodyToFlux(String.class);
-                // .filter(response -> response != null && !response.trim().isEmpty())
-                // .map(this::extractContent)
-                // .filter(content -> !content.isEmpty());
     }
 
-    private String extractContent(String responseLine) {
-        try {
-            log.debug("Received RAG line: {}", responseLine);
-            String line = responseLine.trim();
-            
-            // Handle SSE format
-            if (line.startsWith("data: ")) {
-                line = line.substring(6).trim();
-            }
-            
-            if ("[DONE]".equals(line)) {
-                return "[DONE]";
-            }
-
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(line);
-            
-            JsonNode message = root.get("message");
-            if (message != null) {
-                JsonNode content = message.get("content");
-                if (content != null && !content.isNull()) {
-                    String text = content.asText();
-                    log.debug("Extracted RAG content: {}", text);
-                    return text;
-                }
-            }
-            
-            JsonNode done = root.get("done");
-            if (done != null && done.asBoolean(false)) {
-                return "[DONE]";
-            }
-            
-            return "";
-        } catch (Exception e) {
-            log.warn("Failed to parse RAG stream line: {}", responseLine, e);
-            return "";
-        }
-    }
+   
 }

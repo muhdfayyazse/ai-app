@@ -1,5 +1,6 @@
 package com.ai.chat.controller;
 
+import com.ai.chat.dto.AiChatResponse;
 import com.ai.chat.dto.RagRequest;
 import com.ai.chat.entity.Document;
 import com.ai.chat.service.DocumentService;
@@ -15,7 +16,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/rag")
-@CrossOrigin(origins = {"http://localhost:3000","http://localhost:3001"})
 @Slf4j
 public class RagController {
     private final RagService ragService;
@@ -29,8 +29,7 @@ public class RagController {
     @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamRagChat(@RequestBody RagRequest request) {
         return ragService.streamRagCompletion(
-            request.getQuestion(), 
-            request.getModel(), 
+            request.getQuestion(),  
             request.getMaxResults()
         );
     }

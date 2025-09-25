@@ -5,21 +5,12 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.tool.DefaultToolCallingManager;
-import org.springframework.ai.ollama.OllamaChatModel;
-import org.springframework.ai.ollama.api.OllamaApi;
-import org.springframework.ai.ollama.api.OllamaOptions;
-import org.springframework.ai.ollama.management.ModelManagementOptions;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.DefaultResponseErrorHandler;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import com.ai.chat.dto.AiChatChoice;
 import com.ai.chat.dto.AiChatMessage;
@@ -27,7 +18,6 @@ import com.ai.chat.dto.AiChatResponse;
 import com.ai.chat.exception.OpenAIServiceException;
 import com.ai.chat.helper.JsonHelper;
 
-import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -35,107 +25,53 @@ import reactor.core.publisher.Flux;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(name = "spring.ai.ollama.enabled", havingValue = "true", matchIfMissing = false)
-public class OllamaService implements AiService{
-    
-    //private final ChatModel chatModel;
+@ConditionalOnProperty(name = "spring.ai.ollama.enabled", havingValue = "false", matchIfMissing = false)
+public class OpenAIService implements AiService{
 
+    private final ChatModel chatModel;
     private final JsonHelper jsonHelper;
-
-    @Value("${spring.ai.ollama.base-url:http://localhost:11434}")
-    private String defaultBaseUrl;
-
-    @Value("${spring.ai.ollama.chat.options.model:llama3.2:3b}")
-    private String defaultModel;
-
-    @Value("${spring.ai.ollama.chat.options.temperature:0.7}")
-    private Double defaultTemperature;
-
-    @Value("${spring.ai.ollama.chat.options.max-tokens:1000}")
-    private Integer defaultMaxTokens;
-
     /**
-     * Generate streaming chat completion using Spring AI Ollama
+     * Generate streaming chat completion response
+     * Returns structured streaming response similar to OpenAI API format
      */
     @Override
     public Flux<String> streamChatCompletion(String message) {
         try {
             log.info("Starting OpenAI streaming response for message: {}", message);
-
-            OllamaApi ollamaApi = OllamaApi.builder()
-                .baseUrl(defaultBaseUrl)
-                .restClientBuilder(RestClient.builder())
-                .webClientBuilder( WebClient.builder())
-                .responseErrorHandler(new DefaultResponseErrorHandler())
-                .build();
-
-            OllamaOptions options = OllamaOptions.builder()
-                .model(defaultModel)
-                .temperature(defaultTemperature)
-            .build();
-
-            OllamaChatModel chatModel = new OllamaChatModel(
-                ollamaApi,
-                options,
-                DefaultToolCallingManager.builder().build(),
-                ObservationRegistry.create(),
-                ModelManagementOptions.builder().build()
-            );
-
+            
             List<Message> messages = createMessageList(message);
             Prompt prompt = new Prompt(messages);
+            
             return chatModel.stream(prompt)
-                .map(this::createStandardResponse)
-                .doOnComplete(() -> log.info("Ollama streaming completed"))
-                .doOnError(error -> log.error("Error in Ollama streaming", error));
+                    .map(this::createStandardResponse)
+                    .doOnComplete(() -> log.info("OpenAI streaming completed"))
+                    .doOnError(error -> log.error("Error in OpenAI streaming", error));
 
         } catch (Exception e) {
-            log.error("Error starting Ollama streaming", e);
-            return Flux.error(new OpenAIServiceException("Failed to start Ollama streaming: " + e.getMessage(), e));
+            log.error("Error starting OpenAI streaming", e);
+            return Flux.error(new OpenAIServiceException("Failed to start OpenAI streaming: " + e.getMessage(), e));
         }
     }
-
     @Override
-    public Flux<String> streamChatCompletion(List<Message> messages){
+    public Flux<String> streamChatCompletion(List<Message> messages) {
         try {
             log.info("Starting OpenAI streaming response for message: {}", Arrays.toString(messages.toArray()));
-
-            OllamaApi ollamaApi = OllamaApi.builder()
-            .baseUrl("http://localhost:11434")
-            .restClientBuilder(RestClient.builder())
-            .webClientBuilder( WebClient.builder())
-            .responseErrorHandler(new DefaultResponseErrorHandler())
-            .build();
-
-        OllamaOptions options = OllamaOptions.builder()
-            .model(defaultModel)
-            .temperature(defaultTemperature)
-        .build();
-
-        OllamaChatModel chatModel = new OllamaChatModel(
-            ollamaApi,
-            options,
-            DefaultToolCallingManager.builder().build(),
-            ObservationRegistry.create(),
-            ModelManagementOptions.builder().build()
-        );
-            Prompt prompt = new Prompt(messages);
+            Prompt prompt = new Prompt(messages);       
             return chatModel.stream(prompt)
-                .map(this::createStandardResponse)
-                .doOnComplete(() -> log.info("Ollama streaming completed"))
-                .doOnError(error -> log.error("Error in Ollama streaming", error));
+                    .map(this::createStandardResponse)
+                    .doOnComplete(() -> log.info("OpenAI streaming completed"))
+                    .doOnError(error -> log.error("Error in OpenAI streaming", error));
 
         } catch (Exception e) {
-            log.error("Error starting Ollama streaming", e);
-            return Flux.error(new OpenAIServiceException("Failed to start Ollama streaming: " + e.getMessage(), e));
-        } 
+            log.error("Error starting OpenAI streaming", e);
+            return Flux.error(new OpenAIServiceException("Failed to start OpenAI streaming: " + e.getMessage(), e));
+        }
     }
     /**
-     * Create message list with system and user messages
+     * Create message list with user messages
      */
     private List<Message> createMessageList(String userMessage) {
         List<Message> messages = new ArrayList<>();
-        messages.add(new SystemMessage("You are a helpful assistant"));
         messages.add(new UserMessage(userMessage));
         return messages;
     }
@@ -152,8 +88,8 @@ public class OllamaService implements AiService{
             aiChatResponse.setId(response.getMetadata().getId());
             aiChatResponse.setModel(response.getMetadata().getModel());
         } else {
-            aiChatResponse.setId("ollama-" + System.currentTimeMillis());
-            aiChatResponse.setModel(defaultModel);
+            aiChatResponse.setId("openai-" + System.currentTimeMillis());
+            aiChatResponse.setModel("gpt-4.1-nano");
         }
 
         List<AiChatChoice> aiChatChoices = response.getResults().stream()
@@ -200,6 +136,6 @@ public class OllamaService implements AiService{
             })
             .toList();
         aiChatResponse.setChoices(aiChatChoices);
-        return  jsonHelper.toJson(aiChatResponse);
+        return jsonHelper.toJson(aiChatResponse);
     }
 }

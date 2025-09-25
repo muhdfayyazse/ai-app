@@ -3,8 +3,9 @@ frontend/dist/
 frontend/build/
 frontend/.DS_Store
 frontend/.next/
+frontend/.vscode/
 backend/target/
-backend/data
+backend/data/
 backend/.DS_Store
 .DS_Store
-
+backend/.vscode/

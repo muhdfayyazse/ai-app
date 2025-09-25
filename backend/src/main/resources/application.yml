@@ -32,3 +32,26 @@ spring:
       allowed-methods: "GET,POST,PUT,DELETE,OPTIONS"
       allowed-headers: "*"
       allow-credentials: true
+
+  ai:
+    openai:
+      api-key: "dummy"
+      chat:
+        options:
+          model: "gpt-4.1-nano"       #working with Spring AI 1.0.2
+          #model: "gpt-5-nano"
+          temperature: 1.0
+          max-tokens: 1000
+    ollama:
+      base-url: "http://localhost:11434"
+      chat:
+        options:
+          model: "llama3.2:3b"
+          temperature: 0.7
+          max-tokens: 1000
+      enabled: true
+
+logging:
+  level:
+    org.springframework.ai: INFO
+    org.springframework.boot.autoconfigure: INFO    

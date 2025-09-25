@@ -34,11 +34,10 @@ export const useChat = (initialConfig: ChatConfig = { model: 'llama3.2:3b' }) =>
 
     try {
       const assistantMessage = addMessage({ role: 'assistant', content: '' });
-      console.log('model: ' + config.model + ', content: '+ content);
+
       const response = await fetch('http://localhost:8080/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        
         body: JSON.stringify({ message: content, model: config.model }),
       });
 
@@ -48,43 +47,56 @@ export const useChat = (initialConfig: ChatConfig = { model: 'llama3.2:3b' }) =>
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let accumulatedContent = '';
-      let shouldStop = false;
+      let buffer = '';
 
       while (true) {
-        const {value } = await reader.read();
-        const chunk = decoder.decode(value, { stream: true });
-        if (!chunk) continue;
-        let data = chunk.trim();
-        if (chunk.startsWith('data:')) {
-          data = chunk.slice(5).trim();
-          if (!chunk) continue;
-        }
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        try {
-          const payload = JSON.parse(data);
-          const done = payload?.done;
-          if (done) { shouldStop = true; break; }
-          const token = payload?.message?.content ?? '';
-          if (token) {
-            accumulatedContent += token;
-            setMessages(prev => prev.map(msg => 
-              msg.id === assistantMessage.id 
-                ? { ...msg, content: accumulatedContent }
-                : msg
-            ));
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep the last incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.trim() === '') continue; // Skip empty lines
+          if (line.startsWith('data:')) {
+            const data = line.slice(5); // Remove 'data: ' prefix
+            
+            try {
+              const payload = JSON.parse(data);
+
+              if (payload.choices?.[0]?.message) {
+                const token = payload.choices[0].message.content;
+                if (token) {
+                  accumulatedContent += token;
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === assistantMessage.id 
+                      ? { ...msg, content: accumulatedContent }
+                      : msg
+                  ));
+                }
+              }
+              if(payload.choices?.[0]?.finish_reason === 'stop') {
+                return;
+              }
+            } catch (e) {
+              // If it's not JSON, treat as raw text
+              console.warn('Failed to parse SSE data as JSON:', e);
+              if (data.trim()) {
+                accumulatedContent += data;
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessage.id 
+                    ? { ...msg, content: accumulatedContent }
+                    : msg
+                ));
+              }
+            }
           }
-          if (payload?.done === true) { shouldStop = true; break; }
-        } catch {
-          // Fallback: treat as raw token text
-          accumulatedContent += data;
-          setMessages(prev => prev.map(msg => 
-            msg.id === assistantMessage.id 
-              ? { ...msg, content: accumulatedContent }
-              : msg
-          ));
         }
-        if (shouldStop) break;
       }
+
+
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setMessages(prev => prev.slice(0, -1));

@@ -1,0 +1,208 @@
+{
+    "results": [
+        {
+            "output": {
+                "messageType": "ASSISTANT",
+                "metadata": {
+                    "finishReason": "",
+                    "refusal": "",
+                    "index": 0,
+                    "role": "ASSISTANT",
+                    "id": "chatcmpl-CJeKnVQbrb7lMgHRiaqA9rRytv6Wv",
+                    "messageType": "ASSISTANT"
+                },
+                "toolCalls": [],
+                "content": "?"
+            },
+            "metadata": {
+                "finishReason": "",
+                "contentFilterMetadata": null
+            }
+        }
+    ],
+    "metadata": {
+        "id": "chatcmpl-CJeKnVQbrb7lMgHRiaqA9rRytv6Wv",
+        "model": "gpt-3.5-turbo-0125",
+        "rateLimit": {
+            "requestsLimit": 0,
+            "requestsRemaining": 0,
+            "requestsReset": 0.0,
+            "tokensLimit": 0,
+            "tokensRemaining": 0,
+            "tokensReset": 0.0
+        },
+        "usage": {
+            "promptTokens": 0,
+            "generationTokens": 0,
+            "totalTokens": 0
+        },
+        "promptMetadata": [],
+        "empty": false
+    },
+    "result": {
+        "output": {
+            "messageType": "ASSISTANT",
+            "metadata": {
+                "finishReason": "",
+                "refusal": "",
+                "index": 0,
+                "role": "ASSISTANT",
+                "id": "chatcmpl-CJeKnVQbrb7lMgHRiaqA9rRytv6Wv",
+                "messageType": "ASSISTANT"
+            },
+            "toolCalls": [],
+            "content": "?"
+        },
+        "metadata": {
+            "finishReason": "",
+            "contentFilterMetadata": null
+        }
+    }
+}
+
+
+
+
+---------------------------------
+
+package com.ai.chat.service;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import com.ai.chat.dto.AiChatChoice;
+import com.ai.chat.dto.AiChatMessage;
+import com.ai.chat.dto.AiChatResponse;
+import com.ai.chat.exception.OpenAIServiceException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+
+@Service
+@Slf4j
+public class OllamaService {
+    
+    private final WebClient webClient;
+    private final ObjectMapper objectMapper;
+
+    public OllamaService() {
+        this.webClient = WebClient.builder()
+                .baseUrl("http://localhost:11434")
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+        this.objectMapper = new ObjectMapper();
+    }
+
+    /**
+     * Generate streaming chat completion with custom parameters
+     */
+    public Flux<AiChatResponse> streamChatCompletion(String message, String model) {
+        try {
+            log.info("Starting Ollama streaming response for message: {} with model: {}", message, model);
+            
+            String requestBody = createOllamaRequest(message, model);
+            
+            return webClient.post()
+                    .uri("/api/chat")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToFlux(String.class)
+                    .map(this::parseOllamaResponse)
+                    .filter(response -> response != null)
+                    .doOnComplete(() -> log.info("Ollama streaming completed"))
+                    .doOnError(error -> log.error("Error in Ollama streaming", error));
+
+        } catch (Exception e) {
+            log.error("Error starting Ollama streaming", e);
+            return Flux.error(new OpenAIServiceException("Failed to start Ollama streaming: " + e.getMessage(), e));
+        }
+    }
+
+    /**
+     * Create Ollama API request body
+     */
+    private String createOllamaRequest(String message, String model) {
+        try {
+            String requestJson = String.format("""
+                {
+                    "model": "%s",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a helpful assistant"
+                        },
+                        {
+                            "role": "user",
+                            "content": "%s"
+                        }
+                    ],
+                    "stream": true
+                }
+                """, model != null ? model : "llama3.2:3b", message);
+            
+            log.debug("Ollama request: {}", requestJson);
+            return requestJson;
+        } catch (Exception e) {
+            log.error("Error creating Ollama request", e);
+            throw new OpenAIServiceException("Failed to create Ollama request: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Parse Ollama streaming response and convert to AiChatResponse format
+     */
+    private AiChatResponse parseOllamaResponse(String responseLine) {
+        try {
+            log.info("Received Ollama response: {}", responseLine);
+            
+            if (responseLine == null || responseLine.trim().isEmpty()) {
+                return null;
+            }
+            
+            JsonNode root = objectMapper.readTree(responseLine);
+            String contentText = "";
+            JsonNode message = root.get("message");
+            if (message != null) {
+                JsonNode content = message.get("content");
+                if (content != null && !content.isNull()) {
+                    contentText = content.asText();
+                }
+            }
+            
+            // Create AiChatResponse
+            AiChatResponse aiChatResponse = new AiChatResponse();
+            aiChatResponse.setId("ollama-" + System.currentTimeMillis());
+            aiChatResponse.setModel("llama3.2:3b");
+            
+            // Create choice
+            AiChatChoice aiChatChoice = new AiChatChoice();
+            aiChatChoice.setIndex("0");
+            
+            // Create message
+            AiChatMessage aiChatMessage = new AiChatMessage();
+            aiChatMessage.setRole("assistant");
+            aiChatMessage.setContent(contentText);
+            
+            aiChatChoice.setMessage(aiChatMessage);
+            aiChatChoice.setFinishReason("");
+            
+            List<AiChatChoice> choices = new ArrayList<>();
+            choices.add(aiChatChoice);
+            aiChatResponse.setChoices(choices);
+            
+            log.debug("Parsed Ollama response: {}", contentText);
+            return aiChatResponse;
+            
+        } catch (Exception e) {
+            log.warn("Failed to parse Ollama response: {}", responseLine, e);
+            return null;
+        }
+    }
+}
