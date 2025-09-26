@@ -5,8 +5,6 @@ import java.util.List;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatResponse;
 
-import com.ai.chat.dto.AiChatResponse;
-
 import reactor.core.publisher.Flux;
 
 public interface AiService {

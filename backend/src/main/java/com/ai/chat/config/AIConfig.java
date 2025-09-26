@@ -64,12 +64,10 @@ public class AIConfig {
         
         // Create OpenAiChatOptions
         OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model(model)
+                .temperature(temperature)
+                .maxTokens(maxTokens)
                 .build();
-        
-        // Set model, temperature, and max tokens directly on options
-        options.setModel(model);
-        options.setTemperature(temperature);
-        options.setMaxTokens(maxTokens);
         
         // Create OpenAiChatModel with all required parameters
         return new OpenAiChatModel(

@@ -14,7 +14,6 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
 
-import com.ai.chat.dto.AiChatResponse;
 import com.ai.chat.entity.Document;
 import com.ai.chat.repository.DocumentRepository;
 
@@ -56,7 +55,7 @@ public class RagService {
                 .sorted(Map.Entry.<Document, Double>comparingByValue().reversed())
                 .limit(maxResults)
                 .map(Map.Entry::getKey)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private double calculateSimilarity(String query, String content) {
